@@ -39,7 +39,7 @@
             (a) single world
             (b) multiple worlds
             (c) an application
-        (2) manipulating morphs
+        (2) manipulating morphslocalhost8080
         (3) events
             (a) mouse events
             (b) context menu
@@ -1247,7 +1247,7 @@ function fontHeight(height) {
 
 function isWordChar(aCharacter) {
     // can't use \b or \w because they ignore diacritics
-    return aCharacter.match(/[A-zÀ-ÿ]/);
+    return aCharacter.match(/[A-zÀ-ÿ0-9]/);
 }
 
 function newCanvas(extentPoint, nonRetina) {
@@ -5003,7 +5003,16 @@ CursorMorph.prototype.initializeClipboardHandler = function () {
         },
         false
     );
+
+   this.clipboardHandler.addEventListener(
+        'keyup',
+        function (event) {
+            myself.processKeyUp(event);
+        },
+        false
+    );
     
+ 
     this.clipboardHandler.addEventListener(
         'input',
         function (event) {
@@ -5075,6 +5084,12 @@ CursorMorph.prototype.processKeyDown = function (event) {
         // notify target's parent of key event
         this.target.escalateEvent('reactToKeystroke', event);
     }
+    if (shift) {
+        // we want the world to save this key so that we can
+        // allow shift+click selection
+        this.world().currentKey = 16;
+        this.target.currentlySelecting = true;
+    }
 
     switch (event.keyCode) {
     case 37:
@@ -5129,6 +5144,10 @@ CursorMorph.prototype.processKeyDown = function (event) {
     }
     // notify target's parent of key event
     this.target.escalateEvent('reactToKeystroke', event);
+};
+
+CursorMorph.prototype.processKeyUp = function (event) {
+    this.world().currentKey = null;
 };
 
 // CursorMorph navigation:
@@ -8120,7 +8139,9 @@ StringMorph.prototype.selectAll = function () {
 
 StringMorph.prototype.mouseDownLeft = function (pos) {
     if (this.isEditable) {
-        this.clearSelection();
+        if (this.world().currentKey !== 16) { // shift pressed
+            this.clearSelection();
+        }
     } else {
         this.escalateEvent('mouseDownLeft', pos);
     }
@@ -8133,8 +8154,16 @@ StringMorph.prototype.mouseClickLeft = function (pos) {
             this.edit(); // creates a new cursor
         }
         cursor = this.root().cursor;
-        if (cursor) {
-            cursor.gotoPos(pos);
+        if (this.world().currentKey === 16 // shift pressed
+                && !this.startMark) { 
+            console.log('first shift+click');
+            this.startMark = cursor.slot;
+        }
+        cursor.gotoPos(pos);
+        if (this.world().currentKey === 16) { // shift pressed
+            this.endMark = cursor.slot;
+            this.drawNew();
+            this.changed();
         }
         this.currentlySelecting = true;
     } else {

@@ -5084,6 +5084,7 @@ CursorMorph.prototype.processKeyDown = function (event) {
         break;
     case 39:
         // if Control (or Alt in Mac) is pressed, move one word to the right
+        this.goRight(shift, wordNavigation ? this.target.nextWordFrom(this.slot) - this.slot : 1);
         this.keyDownEventUsed = true;
         break;
     case 38:
@@ -7824,8 +7825,10 @@ StringMorph.prototype.slotPosition = function (slot) {
 };
 
 StringMorph.prototype.slotAt = function (aPoint) {
-    // answer the slot (index) closest to the given point
+    // answer the slot (index) closest to the given point taking
+    // in account how far from the middle of the character it is,
     // so the cursor can be moved accordingly
+
     var txt = this.isPassword ?
                 this.password('*', this.text.length) : this.text,
         idx = 0,
@@ -7843,7 +7846,14 @@ StringMorph.prototype.slotAt = function (aPoint) {
             }
         }
     }
-    return idx - 1;
+
+    // see where our click fell in respect to the middle of the char
+    if (aPoint.x - this.left() >
+            charX - context.measureText(txt[idx - 1]).width / 2) {
+        return idx;
+    } else {
+        return idx - 1;
+    }
 };
 
 StringMorph.prototype.upFrom = function (slot) {
@@ -8125,6 +8135,63 @@ StringMorph.prototype.mouseClickLeft = function (pos) {
     } else {
         this.escalateEvent('mouseClickLeft', pos);
     }
+};
+
+StringMorph.prototype.mouseDoubleClick = function (pos) {
+    // selects the word at pos
+    // if there is no word, we select whatever is between
+    // the previous and next words
+    var slot = this.slotAt(pos);
+
+    if (this.isEditable) {
+        this.edit();
+
+        if (slot === this.text.length) {
+            slot --;
+        }
+
+        if (isWordChar(this.text[slot])) {
+            this.selectWordAt(slot);
+        } else {
+            this.selectBetweenWordsAt(slot);
+        }
+    } else {
+        this.escalateEvent('mouseDoubleClick', pos);
+    }
+ 
+};
+
+StringMorph.prototype.selectWordAt = function (slot) {
+    var cursor = this.root().cursor;
+
+    if (isWordChar(this.text[slot - 1])) {
+        cursor.gotoSlot(this.previousWordFrom(slot));
+        this.startMark = cursor.slot;
+        this.endMark = this.nextWordFrom(cursor.slot);
+    } else {
+        cursor.gotoSlot(slot);
+        this.startMark = slot;
+        this.endMark = this.nextWordFrom(slot);
+    }
+
+    this.drawNew();
+    this.changed();
+};
+
+StringMorph.prototype.selectBetweenWordsAt = function (slot) {
+    var cursor = this.root().cursor;
+
+    cursor.gotoSlot(this.nextWordFrom(this.previousWordFrom(slot)));
+    this.startMark = cursor.slot;
+    this.endMark = cursor.slot;
+
+    while (this.endMark < this.text.length
+            && !isWordChar(this.text[this.endMark])) {
+        this.endMark ++;
+    }
+
+    this.drawNew();
+    this.changed();
 };
 
 StringMorph.prototype.enableSelecting = function () {
@@ -8458,8 +8525,10 @@ TextMorph.prototype.slotPosition = function (slot) {
 };
 
 TextMorph.prototype.slotAt = function (aPoint) {
-    // answer the slot (index) closest to the given point
+    // answer the slot (index) closest to the given point taking
+    // in account how far from the middle of the character it is,
     // so the cursor can be moved accordingly
+
     var charX = 0,
         row = 0,
         col = 0,
@@ -8471,11 +8540,19 @@ TextMorph.prototype.slotAt = function (aPoint) {
         row += 1;
     }
     row = Math.max(row, 1);
+
     while (aPoint.x - this.left() > charX) {
         charX += context.measureText(this.lines[row - 1][col]).width;
         col += 1;
     }
-    return this.lineSlots[Math.max(row - 1, 0)] + col - 1;
+
+    // see where our click fell in respect to the middle of the char
+    if (aPoint.x - this.left() >
+            charX - context.measureText(this.lines[row - 1][col]).width / 2) {
+        return this.lineSlots[Math.max(row - 1, 0)] + col;
+    } else {
+        return this.lineSlots[Math.max(row - 1, 0)] + col - 1;
+    }
 };
 
 TextMorph.prototype.upFrom = function (slot) {
@@ -8539,6 +8616,13 @@ TextMorph.prototype.selectAll = StringMorph.prototype.selectAll;
 TextMorph.prototype.mouseDownLeft = StringMorph.prototype.mouseDownLeft;
 
 TextMorph.prototype.mouseClickLeft = StringMorph.prototype.mouseClickLeft;
+
+TextMorph.prototype.mouseDoubleClick = StringMorph.prototype.mouseDoubleClick;
+
+TextMorph.prototype.selectWordAt = StringMorph.prototype.selectWordAt;
+
+TextMorph.prototype.selectBetweenWordsAt
+    = StringMorph.prototype.selectBetweenWordsAt;
 
 TextMorph.prototype.enableSelecting = StringMorph.prototype.enableSelecting;
 

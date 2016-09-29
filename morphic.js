@@ -8154,18 +8154,19 @@ StringMorph.prototype.mouseClickLeft = function (pos) {
             this.edit(); // creates a new cursor
         }
         cursor = this.root().cursor;
-        if (this.world().currentKey === 16 // shift pressed
-                && !this.startMark) { 
-            console.log('first shift+click');
-            this.startMark = cursor.slot;
+        if (cursor) {
+            if (this.world().currentKey === 16 // shift pressed
+                    && !this.startMark) { 
+                this.startMark = cursor.slot;
+            }
+            cursor.gotoPos(pos);
+            if (this.world().currentKey === 16) { // shift pressed
+                this.endMark = cursor.slot;
+                this.drawNew();
+                this.changed();
+            }
+            this.currentlySelecting = true;
         }
-        cursor.gotoPos(pos);
-        if (this.world().currentKey === 16) { // shift pressed
-            this.endMark = cursor.slot;
-            this.drawNew();
-            this.changed();
-        }
-        this.currentlySelecting = true;
     } else {
         this.escalateEvent('mouseClickLeft', pos);
     }
@@ -8198,7 +8199,7 @@ StringMorph.prototype.mouseDoubleClick = function (pos) {
 StringMorph.prototype.selectWordAt = function (slot) {
     var cursor = this.root().cursor;
 
-    if (isWordChar(this.text[slot - 1])) {
+    if (slot === 0 || isWordChar(this.text[slot - 1])) {
         cursor.gotoSlot(this.previousWordFrom(slot));
         this.startMark = cursor.slot;
         this.endMark = this.nextWordFrom(cursor.slot);
@@ -8232,14 +8233,16 @@ StringMorph.prototype.enableSelecting = function () {
     this.mouseDownLeft = function (pos) {
         var crs = this.root().cursor,
             already = crs ? crs.target === this : false;
-        this.clearSelection();
-        if (this.isEditable && (!this.isDraggable)) {
-            this.edit();
-            this.root().cursor.gotoPos(pos);
-            this.startMark = this.slotAt(pos);
-            this.endMark = this.startMark;
-            this.currentlySelecting = true;
-            if (!already) {this.escalateEvent('mouseDownLeft', pos); }
+        if (this.world().currentKey !== 16) { // shift pressed
+            this.clearSelection();
+            if (this.isEditable && (!this.isDraggable)) {
+                this.edit();
+                this.root().cursor.gotoPos(pos);
+                this.startMark = this.slotAt(pos);
+                this.endMark = this.startMark;
+                this.currentlySelecting = true;
+                if (!already) {this.escalateEvent('mouseDownLeft', pos); }
+            }
         }
     };
     this.mouseMove = function (pos) {

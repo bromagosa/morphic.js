@@ -5093,7 +5093,7 @@ CursorMorph.prototype.processKeyDown = function (event) {
 
     switch (event.keyCode) {
     case 37:
-        if (this.target.currentlySelecting && !shift) {
+        if (this.target.selection() && !shift) {
             this.gotoSlot(this.target.startMark);
             this.target.clearSelection();
         } else if (shift) {
@@ -5106,8 +5106,17 @@ CursorMorph.prototype.processKeyDown = function (event) {
         this.keyDownEventUsed = true;
         break;
     case 39:
+        if (this.target.selection()) {
+            this.gotoSlot(this.target.endMark + 1);
+            if (shift) {
+                this.updateSelection(shift);
+            } else {
+                this.target.clearSelection();
+            }
+        } else {
         // if Control (or Alt in Mac) is pressed, move one word to the right
-        this.goRight(shift, wordNavigation ? this.target.nextWordFrom(this.slot) - this.slot : 1);
+            this.goRight(shift, wordNavigation ? this.target.nextWordFrom(this.slot) - this.slot : 1);
+        }
         this.keyDownEventUsed = true;
         break;
     case 38:

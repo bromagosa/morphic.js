@@ -4991,6 +4991,9 @@ CursorMorph.prototype.initializeClipboardHandler = function () {
         'keydown',
         function (event) {
             myself.processKeyDown(event);
+            if (event.shiftKey) {
+                myself.world().currentKey = 16;
+            }
             this.value = myself.target.selection();
             this.select();
 
@@ -5004,15 +5007,14 @@ CursorMorph.prototype.initializeClipboardHandler = function () {
         false
     );
 
-   this.clipboardHandler.addEventListener(
+    this.clipboardHandler.addEventListener(
         'keyup',
         function (event) {
-            myself.processKeyUp(event);
+            myself.world().currentKey = null;
         },
         false
     );
-    
- 
+
     this.clipboardHandler.addEventListener(
         'input',
         function (event) {
@@ -5071,7 +5073,8 @@ CursorMorph.prototype.processKeyPress = function (event) {
 CursorMorph.prototype.processKeyDown = function (event) {
     // this.inspectKeyEvent(event);
     var shift = event.shiftKey,
-        wordNavigation = event.ctrlKey || event.altKey;
+        wordNavigation = event.ctrlKey || event.altKey,
+        selecting = this.target.selection().length > 0;
 
     this.keyDownEventUsed = false;
     if (event.ctrlKey && (!event.altKey)) {
@@ -5084,38 +5087,31 @@ CursorMorph.prototype.processKeyDown = function (event) {
         // notify target's parent of key event
         this.target.escalateEvent('reactToKeystroke', event);
     }
-    if (shift) {
-        // we want the world to save this key so that we can
-        // allow shift+click selection
-        this.world().currentKey = 16;
-        this.target.currentlySelecting = true;
-    }
 
     switch (event.keyCode) {
     case 37:
-        if (this.target.selection() && !shift) {
-            this.gotoSlot(this.target.startMark);
+        if (selecting && !shift && !wordNavigation) {
+            this.gotoSlot(Math.min(this.target.startMark, this.target.endMark));
             this.target.clearSelection();
-        } else if (shift) {
-            this.gotoSlot(this.target.endMark - 1);
-            this.updateSelection(shift);
         } else {
-            // if Control (or Alt in Mac) is pressed, move one word to the left
-            this.goLeft(shift, wordNavigation ? this.slot - this.target.previousWordFrom(this.slot) : 1);
+            this.goLeft(
+                    shift,
+                    wordNavigation ?
+                        this.slot - this.target.previousWordFrom(this.slot)
+                        : 1);
         }
         this.keyDownEventUsed = true;
         break;
     case 39:
-        if (this.target.selection()) {
-            this.gotoSlot(this.target.endMark + 1);
-            if (shift) {
-                this.updateSelection(shift);
-            } else {
-                this.target.clearSelection();
-            }
+        if (selecting && !shift && !wordNavigation) {
+            this.gotoSlot(Math.max(this.target.startMark, this.target.endMark));
+            this.target.clearSelection();
         } else {
-        // if Control (or Alt in Mac) is pressed, move one word to the right
-            this.goRight(shift, wordNavigation ? this.target.nextWordFrom(this.slot) - this.slot : 1);
+            this.goRight(
+                    shift,
+                    wordNavigation ?
+                        this.target.nextWordFrom(this.slot) - this.slot
+                        : 1);
         }
         this.keyDownEventUsed = true;
         break;
@@ -5165,6 +5161,7 @@ CursorMorph.prototype.processKeyDown = function (event) {
 
 CursorMorph.prototype.processKeyUp = function (event) {
     this.world().currentKey = null;
+    this.target.escalateEvent('reactToKeystroke', event);
 };
 
 // CursorMorph navigation:
@@ -7836,7 +7833,7 @@ StringMorph.prototype.renderWithBlanks = function (context, startX, y) {
     });
 };
 
-// StringMorph mesuring:
+// StringMorph measuring:
 
 StringMorph.prototype.slotPosition = function (slot) {
     // answer the position point of the given index ("slot")
@@ -8155,13 +8152,29 @@ StringMorph.prototype.selectAll = function () {
 };
 
 StringMorph.prototype.mouseDownLeft = function (pos) {
-    if (this.isEditable) {
-        if (this.world().currentKey !== 16) { // shift pressed
-            this.clearSelection();
-        }
+    if (this.world().currentKey === 16) {
+        this.shiftClick(pos);
+    } else if (this.isEditable) {
+        this.clearSelection();
     } else {
         this.escalateEvent('mouseDownLeft', pos);
     }
+};
+
+StringMorph.prototype.shiftClick = function (pos) {
+    var cursor = this.root().cursor;
+
+    if (cursor) {
+        if (!this.startMark) {
+            this.startMark = cursor.slot;
+        }
+        cursor.gotoPos(pos);
+        this.endMark = cursor.slot;
+        this.drawNew();
+        this.changed();
+    }
+    this.currentlySelecting = false;
+    this.escalateEvent('mouseDownLeft', pos);
 };
 
 StringMorph.prototype.mouseClickLeft = function (pos) {
@@ -8172,18 +8185,9 @@ StringMorph.prototype.mouseClickLeft = function (pos) {
         }
         cursor = this.root().cursor;
         if (cursor) {
-            if (this.world().currentKey === 16 // shift pressed
-                    && !this.startMark) { 
-                this.startMark = cursor.slot;
-            }
             cursor.gotoPos(pos);
-            if (this.world().currentKey === 16) { // shift pressed
-                this.endMark = cursor.slot;
-                this.drawNew();
-                this.changed();
-            }
-            this.currentlySelecting = true;
         }
+        this.currentlySelecting = true;
     } else {
         this.escalateEvent('mouseClickLeft', pos);
     }
@@ -8250,7 +8254,9 @@ StringMorph.prototype.enableSelecting = function () {
     this.mouseDownLeft = function (pos) {
         var crs = this.root().cursor,
             already = crs ? crs.target === this : false;
-        if (this.world().currentKey !== 16) { // shift pressed
+        if (this.world().currentKey === 16) {
+            this.shiftClick(pos);
+        } else {
             this.clearSelection();
             if (this.isEditable && (!this.isDraggable)) {
                 this.edit();
@@ -8668,6 +8674,8 @@ TextMorph.prototype.deleteSelection = StringMorph.prototype.deleteSelection;
 TextMorph.prototype.selectAll = StringMorph.prototype.selectAll;
 
 TextMorph.prototype.mouseDownLeft = StringMorph.prototype.mouseDownLeft;
+
+TextMorph.prototype.shiftClick = StringMorph.prototype.shiftClick;
 
 TextMorph.prototype.mouseClickLeft = StringMorph.prototype.mouseClickLeft;
 
@@ -10753,7 +10761,6 @@ WorldMorph.prototype.init = function (aCanvas, fillPage) {
     this.broken = [];
     this.hand = new HandMorph(this);
     this.keyboardReceiver = null;
-    this.lastEditedText = null;
     this.cursor = null;
     this.activeMenu = null;
     this.activeHandle = null;
@@ -11518,9 +11525,6 @@ WorldMorph.prototype.edit = function (aStringOrTextMorph) {
     if (this.cursor) {
         this.cursor.destroy();
     }
-    if (this.lastEditedText) {
-        this.lastEditedText.clearSelection();
-    }
     this.cursor = new CursorMorph(aStringOrTextMorph);
     aStringOrTextMorph.parent.add(this.cursor);
     this.keyboardReceiver = this.cursor;
@@ -11583,10 +11587,10 @@ WorldMorph.prototype.slide = function (aStringOrTextMorph) {
 
 WorldMorph.prototype.stopEditing = function () {
     if (this.cursor) {
-        this.lastEditedText = this.cursor.target;
+        this.cursor.target.escalateEvent('reactToEdit', this.cursor.target);
+        this.cursor.target.clearSelection();
         this.cursor.destroy();
         this.cursor = null;
-        this.lastEditedText.escalateEvent('reactToEdit', this.lastEditedText);
     }
     this.keyboardReceiver = null;
     if (this.virtualKeyboard) {
